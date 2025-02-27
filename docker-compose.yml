@@ -1,0 +1,80 @@
+services:
+  traefik:
+    image: "traefik:v3.3"
+    container_name: "api-gateway"
+    command:
+      - "--api.insecure=true" # Включаем веб-интерфейс Traefik (по умолчанию отключён)
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--accesslog=true"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"
+      - "8080:8080" # Админка Traefik
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    restart: always
+    ports:
+      - "9092:9092"
+      - "29092:29092"  # Внутренний порт для контейнеров
+      - "9093:9093"  # Для внешних соединений
+    environment:
+      CLUSTER_ID: "vV6kIjDfT-SiyJvepUzzbA"
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092,INTERNAL://kafka:29092,EXTERNAL://localhost:9093"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_PROCESS_ROLES: "controller,broker"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "EXTERNAL"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+
+  # retailer-api:
+  #   image: "vasiliy82/retailer-api"
+  #   container_name: "retailer-api"
+  #   environment:
+  #     - OTEL_EXPORTER_URL=http://otel-collector:4317
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.retailer.rule=HeadersRegexp(`Accept`, `application/vnd.myapi.v1.*`)"
+  #     - "traefik.http.services.retailer.loadbalancer.server.port=8081"
+
+  # order-processing:
+  #   image: "vasiliy82/order-processing"
+  #   container_name: "order-processing"
+  #   environment:
+  #     - OTEL_EXPORTER_URL=http://otel-collector:4317
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.orders.rule=HeadersRegexp(`Accept`, `application/vnd.myapi.v2.*`)"
+  #     - "traefik.http.services.orders.loadbalancer.server.port=8082"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./deployment/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317" #gRPC
+      - "4318:4318" #HTTP
+    links:
+      - kafka
+
+volumes:
+  kafka_data:

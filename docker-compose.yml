@@ -27,7 +27,7 @@ services:
       CLUSTER_ID: "vV6kIjDfT-SiyJvepUzzbA"
       KAFKA_NODE_ID: 1
       KAFKA_LISTENERS: "PLAINTEXT://:9092,INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9093"
-      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092,INTERNAL://kafka:29092,EXTERNAL://localhost:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092,INTERNAL://kafka:29092,EXTERNAL://localhost:9093"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
       KAFKA_PROCESS_ROLES: "controller,broker"
@@ -43,6 +43,17 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true  # Включаем поддержку OTLP
+      - KAFKA_BROKERS=kafka:9092
+      - SPAN_STORAGE_TYPE=memory  # Можно поменять на badger/cassandra/elasticsearch
+    ports:
+      - "16686:16686"  # UI Jaeger
+      - "4319:4317"  # gRPC OTLP
+      - "4320:4318"  # HTTP OTLP
 
   # retailer-api:
   #   image: "vasiliy82/retailer-api"
@@ -68,6 +79,7 @@ services:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
+    restart: always
     volumes:
       - ./deployment/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:

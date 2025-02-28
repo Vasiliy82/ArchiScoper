@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/Vasiliy82/ArchiScoper/retailer-api/internal/usecase"
+	"github.com/Vasiliy82/ArchiScoper/retailer-api/pkg/tracing"
 	"github.com/gin-gonic/gin"
-	"go.opentelemetry.io/otel"
 )
 
 type OrderHandler struct {
@@ -17,8 +17,8 @@ func NewOrderHandler(orderUC *usecase.OrderUseCase) *OrderHandler {
 }
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
-	tracer := otel.Tracer("handler")
-	ctx, span := tracer.Start(c.Request.Context(), "CreateOrderHandler")
+	// Используем нашу библиотеку трейсинга вместо raw OpenTelemetry API
+	ctx, span := tracing.StartPresentation(c.Request.Context(), "CreateOrder", tracing.SubLayerHTTP)
 	defer span.End()
 
 	var req map[string]interface{}

@@ -2,9 +2,15 @@ receivers:
   otlp:
     protocols:
       grpc:
+        endpoint: "0.0.0.0:4317"
       http:
+        endpoint: "0.0.0.0:4318"
 
 exporters:
+  otlp/jaeger:
+    endpoint: "jaeger:4317"
+    tls:
+      insecure: true
   kafka:
     brokers: ["kafka:29092"]
     topic: "otel-traces"
@@ -20,4 +26,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [kafka]
+      exporters: [kafka, otlp/jaeger]

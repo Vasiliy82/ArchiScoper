@@ -2,10 +2,16 @@ package tracing
 
 import "time"
 
-type Config struct {
-	ServiceName string
+type TraceConfig struct {
 	ExporterURL string
 	SampleRate  float64
-	Environment string
 	Timeout     time.Duration
+}
+
+type AppInfo struct {
+	Environment       string
+	DomainName        string
+	ServiceName       string
+	ServiceVersion    string
+	ServiceInstanceID string
 }

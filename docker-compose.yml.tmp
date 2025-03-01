@@ -1,0 +1,20 @@
+
+  # retailer-api:
+  #   image: "vasiliy82/retailer-api"
+  #   container_name: "retailer-api"
+  #   environment:
+  #     - OTEL_EXPORTER_URL=http://otel-collector:4317
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.retailer.rule=HeadersRegexp(`Accept`, `application/vnd.myapi.v1.*`)"
+  #     - "traefik.http.services.retailer.loadbalancer.server.port=8081"
+
+  # order-processing:
+  #   image: "vasiliy82/order-processing"
+  #   container_name: "order-processing"
+  #   environment:
+  #     - OTEL_EXPORTER_URL=http://otel-collector:4317
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.orders.rule=HeadersRegexp(`Accept`, `application/vnd.myapi.v2.*`)"
+  #     - "traefik.http.services.orders.loadbalancer.server.port=8082"

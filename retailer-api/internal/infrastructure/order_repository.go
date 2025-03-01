@@ -7,10 +7,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/Vasiliy82/ArchiScoper/retailer-api/internal/domain"
+	"github.com/Vasiliy82/ArchiScoper/retailer-api/pkg/domain"
+	"github.com/Vasiliy82/ArchiScoper/retailer-api/pkg/tracing"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // OrderRepository отвечает за публикацию заказов в Kafka
@@ -27,6 +28,7 @@ func NewOrderRepository(brokers []string, topic string) *OrderRepository {
 		kgo.DefaultProduceTopic(topic),
 		kgo.ProduceRequestTimeout(10 * time.Second),
 		kgo.RequiredAcks(kgo.AllISRAcks()), // Ждем, пока все реплики подтвердят запись
+		kgo.ClientID("retailer-api"),
 	}
 
 	client, err := kgo.NewClient(opts...)
@@ -56,26 +58,31 @@ func (r *OrderRepository) EnsureTopicExists(topic string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Проверяем, существует ли топик
+	ctx, span := tracing.StartInfrastructure(ctx, "EnsureTopicExists", tracing.SubLayerBroker)
+	defer span.End()
+
 	topicMetadata, err := r.admin.ListTopics(ctx)
 	if err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("ошибка получения списка топиков: %w", err)
 	}
 
 	if _, exists := topicMetadata[topic]; exists {
 		log.Printf("Топик %s уже существует", topic)
+		span.SetAttributes(attribute.Bool("topic.exists", true))
 		return nil
 	}
 
-	// Создаем топик
 	_, err = r.admin.CreateTopics(ctx, 1, 1, map[string]*string{
-		"min.insync.replicas": toPtr("1"), // Гарантируем запись при наличии 1 реплики
+		"min.insync.replicas": toPtr("1"),
 	}, topic)
 
 	if err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("ошибка создания топика %s: %w", topic, err)
 	}
 
+	span.SetAttributes(attribute.Bool("topic.created", true))
 	log.Printf("Топик %s успешно создан", topic)
 	return nil
 }
@@ -87,29 +94,29 @@ func toPtr(val string) *string {
 
 // PublishOrder отправляет заказ в Kafka
 func (r *OrderRepository) PublishOrder(ctx context.Context, order domain.Order) error {
-	tracer := otel.Tracer("repository")
-	ctx, span := tracer.Start(ctx, "PublishOrder")
+	ctx, span := tracing.StartInfrastructure(ctx, "PublishOrder", tracing.SubLayerBroker)
 	defer span.End()
 
-	// Сериализуем заказ в JSON
 	data, err := json.Marshal(order)
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 
-	// Формируем Kafka-сообщение
 	record := &kgo.Record{
 		Topic: r.topic,
 		Key:   []byte(order.ID),
 		Value: data,
 	}
 
-	// Отправляем сообщение в Kafka с ожиданием подтверждения записи
 	err = r.client.ProduceSync(ctx, record).FirstErr()
 	if err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("ошибка отправки сообщения в Kafka: %w", err)
 	}
 
+	span.SetAttributes(attribute.String("kafka.topic", r.topic))
+	span.SetAttributes(attribute.String("order.id", order.ID))
 	log.Printf("Сообщение отправлено в Kafka (топик: %s, key: %s)", r.topic, order.ID)
 	return nil
 }

@@ -26,7 +26,9 @@ func main() {
 
 	}
 
-	tracing.InitTracer(cfg, appInfo)
+	// Инициализация трейсинга
+	shutdown := tracing.InitTracer(cfg, appInfo)
+	defer shutdown()
 
 	kafkaBrokers := strings.Split(os.Getenv("KAFKA_BROKER"), ",")
 	topic := os.Getenv("KAFKA_ORDERS_TOPIC")

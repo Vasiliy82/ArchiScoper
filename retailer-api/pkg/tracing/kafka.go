@@ -24,23 +24,6 @@ func InjectTraceContextToKafka(ctx context.Context) []kgo.RecordHeader {
 	}
 }
 
-/*
-// ExtractTraceContextFromKafka извлекает `traceparent` из заголовков Kafka и восстанавливает контекст OpenTelemetry
-func ExtractTraceContextFromKafka(ctx context.Context, headers []kgo.RecordHeader) context.Context {
-	carrier := propagation.MapCarrier{}
-
-	for _, h := range headers {
-		if h.Key == "traceparent" {
-			carrier["traceparent"] = string(h.Value)
-			break
-		}
-	}
-
-	return propagation.TraceContext{}.Extract(ctx, carrier)
-}
-
-*/
-
 // ExtractTraceContextFromKafka извлекает `traceparent` из заголовков Kafka и создаёт `Link` (Consumer)
 func ExtractTraceContextFromKafka(ctx context.Context, headers []kgo.RecordHeader) []trace.Link {
 	carrier := propagation.MapCarrier{}

@@ -39,7 +39,7 @@ func main() {
 	sagaManager := workflows.NewSagaManager()
 
 	// Запуск Kafka-консьюмера
-	kafkaConsumer := infrastructure.NewKafkaConsumer(kafkaBrokers, kafkaTopic, sagaManager)
+	kafkaConsumer := infrastructure.NewKafkaConsumer(kafkaBrokers, kafkaTopic, sagaManager, 500)
 	defer kafkaConsumer.Close()
 
 	// Контекст для graceful shutdown

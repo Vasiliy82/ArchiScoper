@@ -5,19 +5,22 @@ import (
 	"log"
 
 	"github.com/Vasiliy82/ArchiScoper/retailer-api/pkg/domain"
-	"github.com/Vasiliy82/ArchiScoper/retailer-api/pkg/tracing"
 	"github.com/itimofeev/go-saga"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type contextKey string
 
-const orderContextKey contextKey = "order"
+const sagaContextKey contextKey = "sagaContext"
 
 // SagaManager управляет выполнением саги
 type SagaManager struct {
 	saga *saga.Saga
+}
+
+type SagaContextData struct {
+	LastSpanContext trace.SpanContext
+	Order           domain.Order
 }
 
 // NewSagaManager создает новый экземпляр SagaManager
@@ -62,8 +65,12 @@ func NewSagaManager() *SagaManager {
 
 // Execute запускает сагу
 func (sm *SagaManager) Execute(ctx context.Context, order domain.Order) error {
-	ctx = setOrderToContext(ctx, order) // Сохраняем order в контексте
-	coordinator := saga.NewCoordinator(ctx, ctx, sm.saga, saga.New())
+	span := trace.SpanFromContext(ctx)
+	sagaCtxData := &SagaContextData{LastSpanContext: span.SpanContext(), Order: order}
+	// New context from background
+	sagaCtx := context.WithValue(context.Background(), sagaContextKey, sagaCtxData)
+
+	coordinator := saga.NewCoordinator(sagaCtx, sagaCtx, sm.saga, saga.New())
 
 	result := coordinator.Play()
 	if result.ExecutionError != nil {
@@ -75,30 +82,14 @@ func (sm *SagaManager) Execute(ctx context.Context, order domain.Order) error {
 }
 
 // wrapAction оборачивает действие в обработку OpenTelemetry
-func (sm *SagaManager) wrapAction(action func(context.Context, domain.Order) error) func(context.Context) error {
+func (sm *SagaManager) wrapAction(action func(context.Context, *SagaContextData) error) func(context.Context) error {
 	return func(ctx context.Context) error {
-
-		order, ok := getOrderFromContext(ctx)
-		if !ok {
-			log.Println("Ошибка: заказ не найден в контексте")
-			return nil
+		// Получаем SagaContext
+		sagaCtx, _ := ctx.Value(sagaContextKey).(*SagaContextData)
+		if sagaCtx == nil {
+			sagaCtx = &SagaContextData{}
 		}
-		ctx, span := tracing.StartApplication(ctx, "SagaStep",
-			trace.WithAttributes(attribute.KeyValue{Key: "order", Value: attribute.StringValue(order.ID)}),
-		)
-		defer span.End()
 
-		return action(ctx, order)
+		return action(ctx, sagaCtx)
 	}
-}
-
-// setOrderToContext сохраняет заказ в контекст
-func setOrderToContext(ctx context.Context, order domain.Order) context.Context {
-	return context.WithValue(ctx, orderContextKey, order)
-}
-
-// getOrderFromContext извлекает заказ из контекста
-func getOrderFromContext(ctx context.Context) (domain.Order, bool) {
-	order, ok := ctx.Value(orderContextKey).(domain.Order)
-	return order, ok
 }

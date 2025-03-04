@@ -201,7 +201,8 @@ func main() {
 				if linkedNodeID, found := linkedTraceMap[link.SpanID]; found {
 					if existsCurrent {
 						protocol := link.Attributes["link.protocol"]
-						graph.AddEdge(linkedNodeID, currentNodeID, duration, isError, "async", protocol)
+						typ := link.Attributes["link.type"]
+						graph.AddEdge(linkedNodeID, currentNodeID, duration, isError, typ, protocol)
 					}
 				}
 			}
@@ -230,6 +231,9 @@ func main() {
 			style := "solid"
 			if metrics.ErrorCount > 0 {
 				color = "red"
+			}
+			if metrics.Type == "saga" {
+				color = "blue"
 			}
 			if metrics.Type == "async" {
 				style = "dashed" // Делаем пунктирную линию для асинхронных вызовов

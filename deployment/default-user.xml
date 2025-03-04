@@ -1,0 +1,15 @@
+<clickhouse>
+  <users>
+    <default>
+      <password>otel_password</password>
+      <profile>default</profile>
+      <quota>default</quota>
+      <networks>
+        <ip>::/0</ip>
+      </networks>
+      <grants>
+        <grant>ALL ON *.*</grant>
+      </grants>
+    </default>
+  </users>
+</clickhouse>

@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -64,45 +62,28 @@ func InitTracer(cfg TraceConfig, info AppInfo) func() {
 
 }
 
-// WrapHTTPHandler оборачивает HTTP-хендлер в OpenTelemetry middleware
-func WrapHTTPHandler(handler http.Handler) http.Handler {
-	return otelhttp.NewHandler(handler, "http-server")
-}
-
-func DoExternalCall(ctx context.Context, name string, destinationDomain string, fn func(ctx context.Context) error) error {
-	return runWithTrace(ctx, name, LayerIntegration, SubLayerThirdParty, fn)
-}
-
-func DoDatabaseCall(ctx context.Context, name string, fn func(ctx context.Context) error) error {
-	return runWithTrace(ctx, name, LayerInfrastructure, SubLayerDatabase, fn)
-}
-
-func DoBusinessLogic(ctx context.Context, name string, fn func(ctx context.Context) error) error {
-	return runWithTrace(ctx, name, LayerApplication, SubLayerUseCase, fn)
-}
-
 // StartApplication создает span для бизнес-логики (UseCase)
-func StartApplication(ctx context.Context, operation string) (context.Context, trace.Span) {
-	return startSpan(ctx, operation, LayerApplication, SubLayerUseCase)
+func StartApplication(ctx context.Context, operation string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	return startSpan(ctx, operation, LayerApplication, SubLayerUseCase, opts...)
 }
 
 // StartPresentation создает span для входного слоя (HTTP/gRPC)
-func StartPresentation(ctx context.Context, operation string, subLayer SubLayer) (context.Context, trace.Span) {
-	return startSpan(ctx, operation, LayerPresentation, subLayer)
+func StartPresentation(ctx context.Context, operation string, subLayer SubLayer, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	return startSpan(ctx, operation, LayerPresentation, subLayer, opts...)
 }
 
 // StartInfrastructure создает span для инфраструктурных операций (БД, кэш, брокеры)
-func StartInfrastructure(ctx context.Context, operation string, subLayer SubLayer) (context.Context, trace.Span) {
-	return startSpan(ctx, operation, LayerInfrastructure, subLayer)
+func StartInfrastructure(ctx context.Context, operation string, subLayer SubLayer, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	return startSpan(ctx, operation, LayerInfrastructure, subLayer, opts...)
 }
 
 // StartIntegration создает span для внешних сервисов
-func StartIntegration(ctx context.Context, operation string, subLayer SubLayer) (context.Context, trace.Span) {
-	return startSpan(ctx, operation, LayerIntegration, subLayer)
+func StartIntegration(ctx context.Context, operation string, subLayer SubLayer, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	return startSpan(ctx, operation, LayerIntegration, subLayer, opts...)
 }
 
 // startSpan - общий метод для создания span с правильными атрибутами
-func startSpan(ctx context.Context, operation string, layer Layer, subLayer SubLayer) (context.Context, trace.Span) {
+func startSpan(ctx context.Context, operation string, layer Layer, subLayer SubLayer, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	// Проверяем допустимую комбинацию Layer → SubLayer
 	if err := validateLayerSubLayer(layer, subLayer); err != nil {
 		panic(fmt.Sprintf("Ошибка трассировки: %v", err)) // Паника здесь уместна, так как ошибка программиста
@@ -114,13 +95,17 @@ func startSpan(ctx context.Context, operation string, layer Layer, subLayer SubL
 	// Формируем имя спана
 	spanName := generateSpanName(operation, layer, subLayer)
 
-	// Создаем span
-	ctx, span := tracer.Start(ctx, spanName,
+	opts = append(opts,
 		trace.WithAttributes(
 			attribute.String("layer", string(layer)),
 			attribute.String("subLayer", string(subLayer)),
 			attribute.String("function.name", functionName),
 		),
+	)
+
+	// Создаем span
+	ctx, span := tracer.Start(ctx, spanName,
+		opts...,
 	)
 
 	return ctx, span

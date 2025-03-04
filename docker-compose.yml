@@ -3,7 +3,7 @@ services:
     image: "traefik:v3.3"
     container_name: "api-gateway"
     command:
-      - "--api.insecure=true" # Включаем веб-интерфейс Traefik (по умолчанию отключён)
+      - "--api.insecure=true"
       - "--providers.docker=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
@@ -11,7 +11,7 @@ services:
       - "--log.level=INFO"
     ports:
       - "80:80"
-      - "8080:8080" # Админка Traefik
+      - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
@@ -21,8 +21,8 @@ services:
     restart: always
     ports:
       - "9092:9092"
-      - "29092:29092"  # Внутренний порт для контейнеров
-      - "9093:9093"  # Для внешних соединений
+      - "29092:29092"
+      - "9093:9093"
     environment:
       CLUSTER_ID: "vV6kIjDfT-SiyJvepUzzbA"
       KAFKA_NODE_ID: 1
@@ -47,13 +47,13 @@ services:
     image: jaegertracing/all-in-one:latest
     container_name: jaeger
     environment:
-      - COLLECTOR_OTLP_ENABLED=true  # Включаем поддержку OTLP
+      - COLLECTOR_OTLP_ENABLED=true
       - KAFKA_BROKERS=kafka:9092
-      - SPAN_STORAGE_TYPE=memory  # Можно поменять на badger/cassandra/elasticsearch
+      - SPAN_STORAGE_TYPE=memory
     ports:
-      - "16686:16686"  # UI Jaeger
-      - "4319:4317"  # gRPC OTLP
-      - "4320:4318"  # HTTP OTLP
+      - "16686:16686"
+      - "4319:4317"
+      - "4320:4318"
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
@@ -63,64 +63,75 @@ services:
     volumes:
       - ./deployment/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4317:4317" #gRPC
-      - "4318:4318" #HTTP
+      - "4317:4317"
+      - "4318:4318"
     links:
       - kafka
 
-  temporal:
-    image: temporalio/auto-setup:latest
-    container_name: temporal
-    environment:
-      - TEMPORAL_BROADCAST_ADDRESS=0.0.0.0
-      - DB=postgres12_pgx
-      - DB_PORT=5432
-      - TEMPORAL_DB=temporal
-      - POSTGRES_USER=temporal
-      - POSTGRES_PASSWORD=temporal
-      - POSTGRES_SEEDS=temporal-db
-#      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    restart: always
     ports:
-      - "7233:7233" # Порт Temporal
-    depends_on:
-      temporal-db:
-        condition: service_healthy
-
-  temporal-admin-tools:
-    image: temporalio/admin-tools:latest
-    container_name: temporal-admin-tools
-    depends_on:
-      - temporal
-    entrypoint: [ "/bin/sh", "-c", "sleep 10; tctl namespace register default || true; sleep infinity" ]
+      - "8123:8123"   # HTTP-интерфейс ClickHouse
+      - "9000:9000"   # Native клиент ClickHouse
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./schemas:/var/lib/clickhouse/format_schemas
+      # - ./deployment/default-user.xml:/etc/clickhouse-server/users.d/default-user.xml
     environment:
-      - TEMPORAL_CLI_ADDRESS=temporal:7233
+      CLICKHOUSE_USER: otel
+      CLICKHOUSE_PASSWORD: "otel_passwd"
+      CLICKHOUSE_DB: otel
+      CLICKHOUSE_LOG_LEVEL: debug
 
-  temporal-web:
-    image: temporalio/web:latest
-    container_name: temporal-web
-    environment:
-      - TEMPORAL_ADDRESS=temporal:7233
+  clickhouse-client:
+    image: clickhouse/clickhouse-client:latest
+    container_name: clickhouse-client
+    restart: always
+    depends_on:
+      - clickhouse
+    entrypoint: ["tail", "-f", "/dev/null"]
+
+  retailer-api:
+    build:
+      context: ./
+      dockerfile: retailer-api/deployment/Dockerfile
+    container_name: retailer-api
+    restart: always
     ports:
-      - "8088:8088" # Веб-интерфейс Temporal
+      - "8081:8081"
     depends_on:
-      - temporal
-
-  temporal-db:
-    image: postgres:12
-    container_name: temporal-db
+      - kafka
     environment:
-      POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: temporal
-      POSTGRES_DB: temporal
-      POSTGRES_HOST_AUTH_METHOD: trust  # Разрешает все подключения
-
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U temporal" ]
-      interval: 5s
-      retries: 5      
+      OTEL_EXPORTER_URL: "otel-collector:4318"
+      APP_ENV: "production"
+      APP_DOMAIN: "web"
+      APP_SERVICE_NAME: "retailer-api"
+      APP_SERVICE_VERSION=: "1.0.0"
+      APP_INSTANCE_ID: "debug"
+      KAFKA_BROKER: "kafka:29092"
+      KAFKA_ORDERS_TOPIC: "orders"
+  retailer-oms:
+    build:
+      context: ./
+      dockerfile: retailer-oms/deployment/Dockerfile
+    container_name: retailer-oms
+    restart: always
+    depends_on:
+      - retailer-api
+      - kafka
+    environment:
+      OTEL_EXPORTER_URL: "otel-collector:4318"
+      APP_ENV: "production"
+      APP_DOMAIN: "oms"
+      APP_SERVICE_NAME: "retailer-oms"
+      APP_SERVICE_VERSION: "1.0.0"
+      APP_INSTANCE_ID: "debug"
+      KAFKA_BROKER: "kafka:29092"
+      KAFKA_ORDERS_TOPIC: "orders"
 
 
 volumes:
   kafka_data:
+  clickhouse_data:

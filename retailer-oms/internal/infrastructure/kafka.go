@@ -9,18 +9,18 @@ import (
 	"github.com/Vasiliy82/ArchiScoper/retailer-api/pkg/tracing"
 	"github.com/Vasiliy82/ArchiScoper/retailer-oms/internal/workflows"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"go.temporal.io/sdk/client"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // KafkaConsumer отвечает за получение заказов из Kafka
 type KafkaConsumer struct {
 	client      *kgo.Client
 	topic       string
-	temporalCli client.Client
+	sagaManager *workflows.SagaManager
 }
 
 // NewKafkaConsumer создает нового Kafka-консьюмера
-func NewKafkaConsumer(brokers []string, topic string, temporalCli client.Client) *KafkaConsumer {
+func NewKafkaConsumer(brokers []string, topic string, sagaManager *workflows.SagaManager) *KafkaConsumer {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup("order-management"),
@@ -36,27 +36,34 @@ func NewKafkaConsumer(brokers []string, topic string, temporalCli client.Client)
 	return &KafkaConsumer{
 		client:      client,
 		topic:       topic,
-		temporalCli: temporalCli,
+		sagaManager: sagaManager,
 	}
 }
 
 // StartListening запускает обработку сообщений
 func (kc *KafkaConsumer) StartListening(ctx context.Context) {
+	log.Println("Topic listening started")
 	for {
 		fetches := kc.client.PollFetches(ctx)
 		iter := fetches.RecordIter()
 		for !iter.Done() {
 			record := iter.Next()
-			if err := kc.processMessage(ctx, record.Value); err != nil {
-				log.Printf("Ошибка обработки заказа: %v", err)
-			}
+			links := tracing.ExtractTraceContextFromKafka(ctx, record.Headers)
+			func(ctx context.Context) {
+				ctx, span := tracing.StartInfrastructure(ctx, "processMessage", tracing.SubLayerBroker, trace.WithLinks(links...))
+				defer span.End()
+				if err := kc.processMessage(ctx, record.Value); err != nil {
+					log.Printf("Ошибка обработки заказа: %v", err)
+				}
+
+			}(ctx)
 		}
 	}
 }
 
 // processMessage отправляет заказ в Temporal
 func (kc *KafkaConsumer) processMessage(ctx context.Context, value []byte) error {
-	ctx, span := tracing.StartInfrastructure(ctx, "ProcessOrder", tracing.SubLayerBroker)
+	ctx, span := tracing.StartInfrastructure(ctx, "processMessage", tracing.SubLayerBroker)
 	defer span.End()
 
 	var order domain.Order
@@ -65,17 +72,15 @@ func (kc *KafkaConsumer) processMessage(ctx context.Context, value []byte) error
 		return err
 	}
 
-	workflowOptions := client.StartWorkflowOptions{
-		ID:        "order-workflow-" + order.ID,
-		TaskQueue: "order-tasks",
-	}
-
-	_, err := kc.temporalCli.ExecuteWorkflow(ctx, workflowOptions, workflows.OrderWorkflow, order)
+	log.Printf("Начинаем обработку заказа %s через Saga", order.ID)
+	err := kc.sagaManager.Execute(ctx, order)
 	if err != nil {
 		span.RecordError(err)
+		log.Printf("Ошибка выполнения Saga для заказа %s: %v", order.ID, err)
 		return err
 	}
 
+	log.Printf("Заказ %s успешно обработан", order.ID)
 	return nil
 }
 

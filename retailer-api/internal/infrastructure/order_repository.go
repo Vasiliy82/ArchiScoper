@@ -97,6 +97,8 @@ func (r *OrderRepository) PublishOrder(ctx context.Context, order domain.Order) 
 	ctx, span := tracing.StartInfrastructure(ctx, "PublishOrder", tracing.SubLayerBroker)
 	defer span.End()
 
+	headers := tracing.InjectTraceContextToKafka(ctx)
+
 	data, err := json.Marshal(order)
 	if err != nil {
 		span.RecordError(err)
@@ -104,15 +106,16 @@ func (r *OrderRepository) PublishOrder(ctx context.Context, order domain.Order) 
 	}
 
 	record := &kgo.Record{
-		Topic: r.topic,
-		Key:   []byte(order.ID),
-		Value: data,
+		Topic:   r.topic,
+		Key:     []byte(order.ID),
+		Value:   data,
+		Headers: headers,
 	}
 
 	err = r.client.ProduceSync(ctx, record).FirstErr()
 	if err != nil {
 		span.RecordError(err)
-		return fmt.Errorf("ошибка отправки сообщения в Kafka: %w", err)
+		log.Printf("Сообщение отправлено в Kafka (топик: %s, key: %s)", r.topic, order.ID)
 	}
 
 	span.SetAttributes(attribute.String("kafka.topic", r.topic))

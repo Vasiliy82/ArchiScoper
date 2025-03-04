@@ -11,10 +11,42 @@ exporters:
     endpoint: "jaeger:4317"
     tls:
       insecure: true
-  kafka:
+  kafka/json:
     brokers: ["kafka:29092"]
-    topic: "otel-traces"
-    encoding: "otlp_json" # можно использовать protobuf для меньшего размера
+    topic: "otel-traces-json"
+    encoding: "otlp_json"
+  kafka/protobuf:
+    brokers: ["kafka:29092"]
+    topic: "otel-traces-proto"
+    encoding: "otlp_proto"  # Заменяем json на protobuf
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s 
+    username: "otel"
+    password: "otel_passwd"
+    database: otel
+    async_insert: true
+    ttl: 72h
+    compress: lz4
+    create_schema: true
+    logs_table_name: otel_logs
+    traces_table_name: otel_traces
+    timeout: 5s
+    metrics_tables:
+      gauge: 
+        name: "otel_metrics_gauge"
+      sum: 
+        name: "otel_metrics_sum"
+      summary: 
+        name: "otel_metrics_summary"
+      histogram: 
+        name: "otel_metrics_histogram"
+      exponential_histogram: 
+        name: "otel_metrics_exp_histogram"
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
 
 processors:
   batch:
@@ -26,4 +58,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [kafka, otlp/jaeger]
+      exporters: [kafka/json, kafka/protobuf, otlp/jaeger, clickhouse]

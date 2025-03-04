@@ -11,8 +11,6 @@ import (
 	"github.com/Vasiliy82/ArchiScoper/retailer-api/pkg/tracing"
 	"github.com/Vasiliy82/ArchiScoper/retailer-oms/internal/infrastructure"
 	"github.com/Vasiliy82/ArchiScoper/retailer-oms/internal/workflows"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 )
 
 func main() {
@@ -36,42 +34,19 @@ func main() {
 
 	kafkaTopic := os.Getenv("KAFKA_ORDERS_TOPIC")
 	kafkaBrokers := strings.Split(os.Getenv("KAFKA_BROKER"), ",")
-	temporalTaskQueue := os.Getenv("TEMPORAL_ORDER_QUEUE")
-	temporalHost := os.Getenv("TEMPORAL_HOST_PORT")
 
-	// Подключение к Temporal
-	temporalClient, err := client.Dial(client.Options{
-		HostPort: temporalHost,
-	})
-	if err != nil {
-		log.Fatalf("Ошибка подключения к Temporal: %v", err)
-	}
-	defer temporalClient.Close()
+	// Инициализация Saga Manager
+	sagaManager := workflows.NewSagaManager()
 
 	// Запуск Kafka-консьюмера
-	kafkaConsumer := infrastructure.NewKafkaConsumer(kafkaBrokers, kafkaTopic, temporalClient)
+	kafkaConsumer := infrastructure.NewKafkaConsumer(kafkaBrokers, kafkaTopic, sagaManager)
 	defer kafkaConsumer.Close()
-
-	// Запуск Temporal Worker
-	wkr := worker.New(temporalClient, temporalTaskQueue, worker.Options{})
-	wkr.RegisterWorkflow(workflows.OrderWorkflow)
-	wkr.RegisterActivity(workflows.AcceptOrder)
-	wkr.RegisterActivity(workflows.AssembleOrder)
-	wkr.RegisterActivity(workflows.PayOrder)
-	wkr.RegisterActivity(workflows.ShipOrder)
-	wkr.RegisterActivity(workflows.CompleteOrder)
 
 	// Контекст для graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-	go kafkaConsumer.StartListening(ctx)
+	defer cancel()
 
-	// Запуск воркера в отдельной горутине
-	go func() {
-		log.Println("Запуск Temporal Worker...")
-		if err := wkr.Run(worker.InterruptCh()); err != nil {
-			log.Fatalf("Ошибка при запуске Temporal Worker: %v", err)
-		}
-	}()
+	go kafkaConsumer.StartListening(ctx)
 
 	// Ожидание сигнала завершения работы
 	sigCh := make(chan os.Signal, 1)

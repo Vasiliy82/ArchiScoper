@@ -7,52 +7,39 @@ DROP TABLE IF EXISTS TraceNodeMapMV;
 
 CREATE TABLE NodeDictionary
 (
-    NodeId UInt32, -- Уникальный короткий идентификатор узла
-    NodeUniqueName String, -- Полное имя узла (SpanAttributes['function.name'] + SpanName)
-    ServiceName String, -- Имя сервиса (для субграфов и минимизации)
-    Layer String, -- Имя слоя (для субграфов и минимизации)
-    SubLayer String, -- Имя подслоя (для субграфов и минимизации)
-    CallCount UInt64, -- Количество вызовов
-    P50Duration UInt64, -- 50-й перцентиль времени выполнения
-    P90Duration UInt64, -- 90-й перцентиль
-    P99Duration UInt64, -- 99-й перцентиль
-    ErrorCount UInt64 -- Количество ошибок
-) ENGINE = ReplacingMergeTree()
+    `NodeId` UInt32,
+    `NodeUniqueName` String,
+    `ServiceName` String,
+    `Layer` String,
+    `SubLayer` String,
+    `CallCount` AggregateFunction(sum, UInt64),
+    `P50Duration` AggregateFunction(quantiles(0.5), UInt64),
+    `P90Duration` AggregateFunction(quantiles(0.9), UInt64),
+    `P99Duration` AggregateFunction(quantiles(0.99), UInt64),
+    `ErrorCount` AggregateFunction(sum, UInt64)
+)
+ENGINE = AggregatingMergeTree
 ORDER BY NodeId;
 
-
-INSERT INTO NodeDictionary
-SELECT
+CREATE MATERIALIZED VIEW NodeDictionaryMV TO NodeDictionary
+AS SELECT
     cityHash64(CONCAT(SpanAttributes['function.name'], '.', SpanName)) AS NodeId,
     CONCAT(SpanAttributes['function.name'], '.', SpanName) AS NodeUniqueName,
     ServiceName,
     SpanAttributes['layer'] AS Layer,
     SpanAttributes['subLayer'] AS SubLayer,
-    count() AS CallCount,
-    quantile(0.50)(Duration) AS P50Duration,
-    quantile(0.90)(Duration) AS P90Duration,
-    quantile(0.99)(Duration) AS P99Duration,
-    countIf(StatusCode = 'Error') AS ErrorCount
+    sumState(toUInt64(1)) AS CallCount,
+    quantilesState(0.5)(Duration) AS P50Duration,
+    quantilesState(0.9)(Duration) AS P90Duration,
+    quantilesState(0.99)(Duration) AS P99Duration,
+    sumState(toUInt64(if(StatusCode = 'Error', 1, 0))) AS ErrorCount
 FROM otel_traces
-GROUP BY NodeUniqueName, ServiceName, SpanAttributes['layer'],
-    SpanAttributes['subLayer'];
-
-
-CREATE MATERIALIZED VIEW NodeDictionaryMV TO NodeDictionary AS
-SELECT
-    cityHash64(CONCAT(SpanAttributes['function.name'], '.', SpanName)) AS NodeId,
-    CONCAT(SpanAttributes['function.name'], '.', SpanName) AS NodeUniqueName,
+GROUP BY
+    NodeId,
+    NodeUniqueName,
     ServiceName,
-    SpanAttributes['layer'] AS Layer,
-    SpanAttributes['subLayer'] AS SubLayer,
-    count() AS CallCount,
-    quantile(0.50)(Duration) AS P50Duration,
-    quantile(0.90)(Duration) AS P90Duration,
-    quantile(0.99)(Duration) AS P99Duration,
-    countIf(StatusCode = 'Error') AS ErrorCount
-FROM otel_traces
-GROUP BY NodeUniqueName, ServiceName, SpanAttributes['layer'],
-    SpanAttributes['subLayer'];
+    Layer,
+    SubLayer;
 
 CREATE TABLE TraceNodeMap
 (

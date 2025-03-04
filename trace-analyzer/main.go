@@ -87,9 +87,20 @@ func main() {
 
 	// **1. Загружаем все узлы (NodeDictionary)**
 	rows, err := conn.Query(`
-		SELECT NodeId, NodeUniqueName, ServiceName, Layer, SubLayer, CallCount, P50Duration, P90Duration, P99Duration, ErrorCount
-		FROM NodeDictionary
-	`)
+		SELECT 
+			NodeId, 
+			NodeUniqueName, 
+			ServiceName, 
+			Layer, 
+			SubLayer, 
+			sumMerge(CallCount) AS CallCount,
+			toUInt64(quantilesMerge(0.50)(P50Duration)[1]) AS P50Duration,
+			toUInt64(quantilesMerge(0.90)(P90Duration)[1]) AS P90Duration,
+			toUInt64(quantilesMerge(0.99)(P99Duration)[1]) AS P99Duration,
+			sumMerge(ErrorCount) AS ErrorCount
+		FROM NodeDictionary FINAL
+		GROUP BY NodeId, NodeUniqueName, ServiceName, Layer, SubLayer;
+`)
 	if err != nil {
 		log.Fatal(err)
 	}

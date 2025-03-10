@@ -13,51 +13,67 @@ type contextKey string
 
 const sagaContextKey contextKey = "sagaContext"
 
+type ServicesConfig struct {
+	SvcAssembly string
+	SvcPayment  string
+	SvcDelivery string
+}
+
 // SagaManager управляет выполнением саги
 type SagaManager struct {
-	saga *saga.Saga
+	saga           *saga.Saga
+	servicesConfig *ServicesConfig
 }
 
 type SagaContextData struct {
 	LastSpanContext trace.SpanContext
 	Order           domain.Order
+	ServicesConfig  *ServicesConfig
 }
 
 // NewSagaManager создает новый экземпляр SagaManager
-func NewSagaManager() *SagaManager {
+func NewSagaManager(cfg *ServicesConfig) *SagaManager {
 	sm := &SagaManager{
-		saga: saga.NewSaga("OrderProcessing"),
+		saga:           saga.NewSaga("OrderProcessing"),
+		servicesConfig: cfg,
+	}
+
+	// Функция для безопасного добавления шагов
+	addStep := func(step *saga.Step) {
+		if err := sm.saga.AddStep(step); err != nil {
+			log.Fatalf("Ошибка при добавлении шага %s: %v", step.Name, err)
+		}
 	}
 
 	// Регистрация шагов саги
-	sm.saga.AddStep(&saga.Step{
+	addStep(&saga.Step{
 		Name:           "AcceptOrder",
 		Func:           sm.wrapAction(AcceptOrder),
 		CompensateFunc: sm.wrapAction(CancelOrder),
 	})
 
-	sm.saga.AddStep(&saga.Step{
+	addStep(&saga.Step{
 		Name:           "AssembleOrder",
 		Func:           sm.wrapAction(AssembleOrder),
 		CompensateFunc: sm.wrapAction(ReturnToStock),
 	})
 
-	sm.saga.AddStep(&saga.Step{
+	addStep(&saga.Step{
 		Name:           "PayOrder",
 		Func:           sm.wrapAction(PayOrder),
 		CompensateFunc: sm.wrapAction(RefundPayment),
 	})
 
-	sm.saga.AddStep(&saga.Step{
+	addStep(&saga.Step{
 		Name:           "ShipOrder",
 		Func:           sm.wrapAction(ShipOrder),
 		CompensateFunc: sm.wrapAction(ReturnToWarehouse),
 	})
 
-	sm.saga.AddStep(&saga.Step{
+	addStep(&saga.Step{
 		Name:           "CompleteOrder",
 		Func:           sm.wrapAction(CompleteOrder),
-		CompensateFunc: func(ctx context.Context, order domain.Order) {}, // Финальный шаг, без компенсации
+		CompensateFunc: func(ctx context.Context) error { return nil }, // Финальный шаг, без компенсации
 	})
 
 	return sm
@@ -66,7 +82,7 @@ func NewSagaManager() *SagaManager {
 // Execute запускает сагу
 func (sm *SagaManager) Execute(ctx context.Context, order domain.Order) error {
 	span := trace.SpanFromContext(ctx)
-	sagaCtxData := &SagaContextData{LastSpanContext: span.SpanContext(), Order: order}
+	sagaCtxData := &SagaContextData{LastSpanContext: span.SpanContext(), Order: order, ServicesConfig: sm.servicesConfig}
 	// New context from background
 	sagaCtx := context.WithValue(context.Background(), sagaContextKey, sagaCtxData)
 

@@ -15,7 +15,7 @@ start-infra:
 
 # Сборка сервисов
 build: prepare
-	docker compose build retailer-api retailer-oms
+	docker compose build retailer-api retailer-oms retailer-assembly retailer-payment retailer-delivery
 	go build -C trace-analyzer -o ../$(BIN_DIR)/trace-analyzer -v main.go
 	go build -C trace-analyzer-v2 -o ../$(BIN_DIR)/trace-analyzer-v2 -v main.go
 

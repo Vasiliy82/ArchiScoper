@@ -23,8 +23,8 @@ ORDER BY NodeId;
 
 CREATE MATERIALIZED VIEW NodeDictionaryMV TO NodeDictionary
 AS SELECT
-    cityHash64(CONCAT(SpanAttributes['function.name'], '.', SpanName)) AS NodeId,
-    CONCAT(SpanAttributes['function.name'], '.', SpanName) AS NodeUniqueName,
+    cityHash64(CONCAT(ServiceName, SpanAttributes['function.name'], '.', SpanName)) AS NodeId,
+    CONCAT(ServiceName, SpanAttributes['function.name'], '.', SpanName) AS NodeUniqueName,
     ServiceName,
     SpanAttributes['layer'] AS Layer,
     SpanAttributes['subLayer'] AS SubLayer,
@@ -54,12 +54,12 @@ INSERT INTO TraceNodeMap
 SELECT
     TraceId,
     SpanId,
-    cityHash64(CONCAT(SpanAttributes['function.name'], '.', SpanName)) AS NodeId
+    cityHash64(CONCAT(ServiceName, SpanAttributes['function.name'], '.', SpanName)) AS NodeId
 FROM otel_traces;
 
 CREATE MATERIALIZED VIEW TraceNodeMapMV TO TraceNodeMap AS
 SELECT
     TraceId,
     SpanId,
-    cityHash64(CONCAT(SpanAttributes['function.name'], '.', SpanName)) AS NodeId
+    cityHash64(CONCAT(ServiceName, SpanAttributes['function.name'], '.', SpanName)) AS NodeId
 FROM otel_traces;

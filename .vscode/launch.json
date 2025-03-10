@@ -38,7 +38,17 @@
             "mode": "auto",
             "program": "${workspaceFolder}/trace-analyzer-v2/main.go",
             "cwd": "${workspaceFolder}/trace-analyzer-v2"
+        },
+        {
+            "name": "retailer-mockservice",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/retailer-mockservice/cmd/main.go",
+            "cwd": "${workspaceFolder}/retailer-mockservice",
+            "envFile": "${workspaceFolder}/retailer-mockservice/env"
         }
+
     ],
     "compounds": [
         {

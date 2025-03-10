@@ -25,7 +25,12 @@ func main() {
 		ServiceName:       os.Getenv("APP_SERVICE_NAME"),    // Название сервиса
 		ServiceVersion:    os.Getenv("APP_SERVICE_VERSION"), // Версия сервиса
 		ServiceInstanceID: os.Getenv("APP_INSTANCE_ID"),     // Уникальный ID экземпляра сервиса
+	}
 
+	sagaConfig := &workflows.ServicesConfig{
+		SvcAssembly: os.Getenv("SVC_ASSEMBLY"),
+		SvcPayment:  os.Getenv("SVC_PAYMENT"),
+		SvcDelivery: os.Getenv("SVC_DELIVERY"),
 	}
 
 	// Инициализация трейсинга
@@ -36,7 +41,7 @@ func main() {
 	kafkaBrokers := strings.Split(os.Getenv("KAFKA_BROKER"), ",")
 
 	// Инициализация Saga Manager
-	sagaManager := workflows.NewSagaManager()
+	sagaManager := workflows.NewSagaManager(sagaConfig)
 
 	// Запуск Kafka-консьюмера
 	kafkaConsumer := infrastructure.NewKafkaConsumer(kafkaBrokers, kafkaTopic, sagaManager, 500)

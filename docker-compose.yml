@@ -3,17 +3,22 @@ services:
     image: "traefik:v3.3"
     container_name: "api-gateway"
     command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--accesslog=true"
-      - "--log.level=INFO"
+#      - "--api.insecure=true"
+#      - "--providers.docker=true"
+#      - "--providers.docker.exposedByDefault=false"
+#      - "--entrypoints.web.address=:80"
+#      - "--entrypoints.websecure.address=:443"
+#      - "--accesslog=true"
+#      - "--log.level=INFO"
+#      - "--tracing.otlp=true"
+#      - "--tracing.otlp.grpc.endpoint=otel-collector:4317"
     ports:
       - "80:80"
       - "8080:8080"
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./deployment/traefik.yml:/etc/traefik/traefik.yml:ro"
+      - "./deployment/static-config.yml:/etc/traefik/static-config.yml:ro"
+#      - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -85,14 +90,6 @@ services:
       CLICKHOUSE_DB: otel
       CLICKHOUSE_LOG_LEVEL: debug
 
-  # clickhouse-client:
-  #   image: clickhouse/clickhouse-client:latest
-  #   container_name: clickhouse-client
-  #   restart: always
-  #   depends_on:
-  #     - clickhouse
-  #   entrypoint: ["tail", "-f", "/dev/null"]
-
   retailer-api:
     build:
       context: ./
@@ -100,7 +97,7 @@ services:
     container_name: retailer-api
     restart: always
     ports:
-      - "8081:8081"
+      - "8081:8080"
     depends_on:
       - kafka
     environment:
@@ -110,6 +107,7 @@ services:
       APP_SERVICE_NAME: "api"
       APP_SERVICE_VERSION=: "1.0.0"
       APP_INSTANCE_ID: "debug"
+      APP_LISTEN_ADDRESS: ":8080"
       KAFKA_BROKER: "kafka:29092"
       KAFKA_ORDERS_TOPIC: "orders"
 
@@ -131,9 +129,9 @@ services:
       APP_INSTANCE_ID: "debug"
       KAFKA_BROKER: "kafka:29092"
       KAFKA_ORDERS_TOPIC: "orders"
-      SVC_ASSEMBLY: "retailer-assembly:8080"
-      SVC_PAYMENT: "retailer-payment:8080"
-      SVC_DELIVERY: "retailer-delivery:8080"
+      SVC_ASSEMBLY: "retailer-assembly:8080/assembly"
+      SVC_PAYMENT: "retailer-payment:8080/payment"
+      SVC_DELIVERY: "retailer-delivery:8080/delivery"
 
   retailer-assembly:
     build:
@@ -148,14 +146,14 @@ services:
       SERVICE_VERSION: "1.0.0"
       LISTEN_ADDRESS: ":8080"
       ENDPOINT_METHOD: "POST"
-      ENDPOINT_NAME: "assembly"
+      ENDPOINT_NAME: "assembly/assembly"
       RESPONSE_BODY: "{\"assembly\":\"ok\"}"
       DURATION_MIN: 200
       DURATION_MAX: 400
       ERROR_400_PROBABILITY: "0.01"
       ERROR_500_PROBABILITY: "0.01"
       REVERSE_ENDPOINT_METHOD: "POST"
-      REVERSE_ENDPOINT_NAME: "cancel-assembly"
+      REVERSE_ENDPOINT_NAME: "assembly/cancel-assembly"
       REVERSE_RESPONSE_BODY: "{\"cancel-assembly\":\"ok\"}"
       REVERSE_DURATION_MIN: 300
       REVERSE_DURATION_MAX: 600
@@ -177,14 +175,14 @@ services:
       SERVICE_VERSION: "1.0.0"
       LISTEN_ADDRESS: ":8080"
       ENDPOINT_METHOD: "POST"
-      ENDPOINT_NAME: "payment"
+      ENDPOINT_NAME: "payment/payment"
       RESPONSE_BODY: "{\"payment\":\"ok\"}"
       DURATION_MIN: 200
       DURATION_MAX: 400
       ERROR_400_PROBABILITY: "0.02"
       ERROR_500_PROBABILITY: "0.01"
       REVERSE_ENDPOINT_METHOD: "POST"
-      REVERSE_ENDPOINT_NAME: "cancel-payment"
+      REVERSE_ENDPOINT_NAME: "payment/cancel-payment"
       REVERSE_RESPONSE_BODY: "{\"cancel-payment\":\"ok\"}"
       REVERSE_DURATION_MIN: 300
       REVERSE_DURATION_MAX: 600
@@ -206,14 +204,14 @@ services:
       SERVICE_VERSION: "1.0.0"
       LISTEN_ADDRESS: ":8080"
       ENDPOINT_METHOD: "POST"
-      ENDPOINT_NAME: "delivery"
+      ENDPOINT_NAME: "delivery/delivery"
       RESPONSE_BODY: "{\"delivery\":\"ok\"}"
       DURATION_MIN: 200
       DURATION_MAX: 400
       ERROR_400_PROBABILITY: "0.03"
       ERROR_500_PROBABILITY: "0.01"
       REVERSE_ENDPOINT_METHOD: "POST"
-      REVERSE_ENDPOINT_NAME: "cancel-delivery"
+      REVERSE_ENDPOINT_NAME: "delivery/cancel-delivery"
       REVERSE_RESPONSE_BODY: "{\"cancel-delivery\":\"ok\"}"
       REVERSE_DURATION_MIN: 300
       REVERSE_DURATION_MAX: 600

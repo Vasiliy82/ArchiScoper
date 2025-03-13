@@ -17,7 +17,7 @@ type Server struct {
 func New(cfg config.Config) *Server {
 	router := mux.NewRouter()
 	router.HandleFunc("/"+cfg.Endpoint.Name, createHandler(cfg.Endpoint)).Methods(cfg.Endpoint.Method)
-	router.HandleFunc("/"+cfg.Endpoint.Name, createHandler(cfg.ReverseEndpoint)).Methods(cfg.Endpoint.Method)
+	router.HandleFunc("/"+cfg.ReverseEndpoint.Name, createHandler(cfg.ReverseEndpoint)).Methods(cfg.Endpoint.Method)
 
 	srv := &http.Server{
 		Addr:    cfg.ListenAddress,

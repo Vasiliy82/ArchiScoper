@@ -49,12 +49,12 @@ reset: clean deploy
 
 # Отправка одного запроса
 order:
-	curl -X POST http://localhost:8081/orders -H "Content-Type: application/json" -d '{}'
+	curl -X POST http://localhost:8081/api/order -H "Content-Type: application/json" -d '{}'
 
 # Генерация нагрузки (несколько заказов)
 load-test:
 	@for i in $(shell seq 1 $(ORDERS)); do \
-		curl -X POST http://localhost:8081/orders -H "Content-Type: application/json" -d '{}'; \
+		curl -X POST http://localhost:8081/api/order -H "Content-Type: application/json" -d '{}'; \
 	done
 report:
 	./bin/trace-analyzer > ./report1.dot

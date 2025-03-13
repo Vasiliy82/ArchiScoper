@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -21,7 +22,7 @@ func createHandler(cfg config.EndpointConfig) http.HandlerFunc {
 		// Извлекаем заголовки трассировки из входящего запроса
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 		// Стартуем span для входного HTTP-запроса
-		_, span := tracing.StartPresentation(ctx, "HandleRequest", tracing.SubLayerHTTP)
+		_, span := tracing.StartPresentation(ctx, fmt.Sprintf("HandleRequest%s", cfg.Name), tracing.SubLayerHTTP)
 		defer span.End()
 
 		time.Sleep(time.Millisecond * time.Duration(cfg.DurationMin+rand.Intn(int(cfg.DurationRnd)))) // Имитация работы

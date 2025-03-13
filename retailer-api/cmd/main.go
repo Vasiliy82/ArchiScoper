@@ -26,6 +26,8 @@ func main() {
 
 	}
 
+	listenAddress := os.Getenv("APP_LISTEN_ADDRESS")
+
 	// Инициализация трейсинга
 	shutdown := tracing.InitTracer(cfg, appInfo)
 	defer shutdown()
@@ -37,6 +39,6 @@ func main() {
 	orderHandler := handler.NewOrderHandler(orderUC)
 
 	router := gin.Default()
-	router.POST("/orders", orderHandler.CreateOrder)
-	router.Run(":8081")
+	router.POST("/api/order", orderHandler.CreateOrder)
+	router.Run(listenAddress)
 }

@@ -1,0 +1,55 @@
+http:
+  routers:
+    retailer-api:
+      entryPoints:
+        - web
+      rule: "PathPrefix(`/api`)"
+      service: retailer-api
+      middlewares:
+        - tracing-headers
+    retailer-assembly:
+      entryPoints:
+        - web
+      rule: "PathPrefix(`/assembly`)"
+      service: retailer-api
+      middlewares:
+        - tracing-headers
+    retailer-payment:
+      entryPoints:
+        - web
+      rule: "PathPrefix(`/payment`)"
+      service: retailer-api
+      middlewares:
+        - tracing-headers
+    retailer-delivery:
+      entryPoints:
+        - web
+      rule: "PathPrefix(`/delivery`)"
+      service: retailer-api
+      middlewares:
+        - tracing-headers
+
+  services:
+    retailer-api:
+      loadBalancer:
+        servers:
+          - url: "http://retailer-api:8080"
+    retailer-assembly:
+      loadBalancer:
+        servers:
+          - url: "http://retailer-assembly:8080"
+    retailer-payment:
+      loadBalancer:
+        servers:
+          - url: "http://retailer-payment:8080"
+    retailer-delivery:
+      loadBalancer:
+        servers:
+          - url: "http://retailer-delivery:8080"
+
+  middlewares:
+    tracing-headers:
+      headers:
+        customRequestHeaders:
+          traceparent: "X-Trace-Parent"
+          tracestate: "X-Trace-State"
